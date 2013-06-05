@@ -58,6 +58,7 @@ public class VerboseCommandOutput
                 break;
             case SILENT:
                 break;
+            case ERROR_ONLY:
             case BRIEF:
             default:
                 output.printMessage( "#" + ExceptionUtils.getMessage( e ) );
@@ -71,7 +72,8 @@ public class VerboseCommandOutput
     @Override
     public void printMessage( String message )
     {
-        if ( config.getVerboseLevel() != VerboseLevel.SILENT )
+        if (( config.getVerboseLevel() != VerboseLevel.SILENT ) &&
+            ( config.getVerboseLevel() != VerboseLevel.ERROR_ONLY ))
         {
             output.printMessage( "#" + message );
         }

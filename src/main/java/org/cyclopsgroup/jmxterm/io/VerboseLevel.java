@@ -16,6 +16,10 @@ public enum VerboseLevel
      */
     SILENT,
     /**
+     * Print out errors only
+     */
+    ERROR_ONLY,
+    /**
      * Print out returned value of messages
      */
     BRIEF,

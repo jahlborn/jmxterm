@@ -143,7 +143,8 @@ public class CliMain
                 {
                     commandCenter.setVerboseLevel( verboseLevel );
                 }
-                if ( verboseLevel != VerboseLevel.SILENT )
+                if (( verboseLevel != VerboseLevel.SILENT ) &&
+                    ( verboseLevel != VerboseLevel.ERROR_ONLY ))
                 {
                     output.printMessage( "Welcome to JMX terminal. Type \"help\" for available commands." );
                 }
