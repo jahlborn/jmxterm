@@ -2,6 +2,7 @@ package org.cyclopsgroup.jmxterm.cmd;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -43,6 +44,8 @@ public class RunCommand
 
     private boolean showQuotationMarks;
 
+    private String types;
+
     /**
      * @inheritDoc
      */
@@ -54,7 +57,8 @@ public class RunCommand
         if ( getSession().getBean() != null )
         {
             MBeanInfo info =
-                session.getConnection().getServerConnection().getMBeanInfo( new ObjectName( session.getBean() ) );
+                session.getConnection().getServerConnection().getMBeanInfo( new ObjectName(
+                                                                                            session.getBean() ) );
             MBeanOperationInfo[] operationInfos = info.getOperations();
             List<String> ops = new ArrayList<String>( operationInfos.length );
             for ( MBeanOperationInfo op : operationInfos )
@@ -77,33 +81,77 @@ public class RunCommand
         String beanName = BeanCommand.getBeanName( bean, domain, session );
         if ( beanName == null )
         {
-            throw new IllegalArgumentException( "Please specify MBean to invoke either using -b option or bean command" );
+            throw new IllegalArgumentException(
+                                                "Please specify MBean to invoke either using -b option or bean command" );
         }
 
-        Validate.isTrue( parameters.size() > 0, "At least one parameter is needed" );
+        Validate.isTrue( parameters.size() > 0,
+                         "At least one parameter is needed" );
+        String[] paramTypes = null;
+        if ( types != null )
+        {
+            paramTypes = types.split( "," );
+            Validate.isTrue( paramTypes.length == parameters.size() - 1,
+                             "Signature does not match parameter count" );
+        }
         String operationName = parameters.get( 0 );
         ObjectName name = new ObjectName( beanName );
-        MBeanServerConnection con = session.getConnection().getServerConnection();
+        MBeanServerConnection con =
+            session.getConnection().getServerConnection();
         MBeanInfo beanInfo = con.getMBeanInfo( name );
+
+        // Looking for operation to invoke
         MBeanOperationInfo operationInfo = null;
         for ( MBeanOperationInfo info : beanInfo.getOperations() )
         {
-            if ( operationName.equals( info.getName() ) && info.getSignature().length == parameters.size() - 1 )
+            if ( operationName.equals( info.getName() )
+                && info.getSignature().length == parameters.size() - 1 )
             {
-                operationInfo = info;
-                break;
+                // If operation name and number of parameters matches, optionally check parameter types
+                if ( paramTypes == null )
+                {
+                    operationInfo = info;
+                    break;
+                }
+                // If paramTypes parameter is set, narrow down operation with parameter matching
+                boolean match = true;
+                MBeanParameterInfo[] paramInfos = info.getSignature();
+                for ( int i = 0; i < paramTypes.length && i < paramInfos.length; i++ )
+                {
+                    // String type is treated specially
+                    // type "string" implies type "java.lang.String"
+                    if ( paramInfos[i].getType().equals( String.class.getName() )
+                        && paramTypes[i].equals( "string" ) )
+                    {
+                        continue;
+                    }
+                    if ( !paramTypes[i].equals( paramInfos[i].getType() ) )
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+                if ( match )
+                {
+                    operationInfo = info;
+                    break;
+                }
             }
         }
+        // If no matching operation is found, throw an exception
         if ( operationInfo == null )
         {
-            throw new IllegalArgumentException( "Operation " + operationName + " with " + ( parameters.size() - 1 )
+            throw new IllegalArgumentException( "Operation " + operationName
+                + " with " + ( parameters.size() - 1 )
                 + " parameters doesn't exist in bean " + beanName );
         }
+
+        // Now set parameters to invoke with
         Object[] params = new Object[parameters.size() - 1];
         MBeanParameterInfo[] paramInfos = operationInfo.getSignature();
         Validate.isTrue( params.length == paramInfos.length,
-                         String.format( "%d parameters are expected but %d are provided", paramInfos.length,
-                                        params.length ) );
+                         String.format( "%d parameters are expected but %d are provided",
+                                        paramInfos.length, params.length ) );
         String[] signatures = new String[paramInfos.length];
         for ( int i = 0; i < paramInfos.length; i++ )
         {
@@ -113,11 +161,16 @@ public class RunCommand
             {
                 expression = ValueFormat.parseValue( expression );
             }
-            Object paramValue = SyntaxUtils.parse( expression, paramInfo.getType() );
+            Object paramValue =
+                SyntaxUtils.parse( expression, paramInfo.getType() );
             params[i] = paramValue;
             signatures[i] = paramInfo.getType();
         }
-        session.output.printMessage( String.format( "calling operation %s of mbean %s", operationName, beanName ) );
+        session.output.printMessage( String.format( "calling operation %s of mbean %s with params %s",
+                operationName, beanName, Arrays.toString(params) ) );
+
+
+        // Invoke operation, record execution time if measure flag is on
         Object result;
         if ( measure )
         {
@@ -129,7 +182,8 @@ public class RunCommand
             finally
             {
                 long latency = System.currentTimeMillis() - start;
-                session.output.printMessage( latency + "ms is taken by invocation" );
+                session.output.printMessage( latency
+                    + "ms is taken by invocation" );
             }
         }
         else
@@ -137,7 +191,9 @@ public class RunCommand
             result = con.invoke( name, operationName, params, signatures );
         }
         session.output.printMessage( "operation returns: " );
-        new ValueOutputFormat( 2, false, showQuotationMarks ).printValue( session.output, result );
+        new ValueOutputFormat( 2, false, showQuotationMarks ).printValue( session.output,
+                                                                          result );
+        // Finish with an empty line
         session.output.println( "" );
     }
 
@@ -166,6 +222,15 @@ public class RunCommand
     public final void setMeasure( boolean measure )
     {
         this.measure = measure;
+    }
+
+    /**
+     * @param types
+     */
+    @Option( name = "t", longName = "types", description = "Require parameters to have specific types (comma separated)" )
+    public final void setTypes( String types )
+    {
+        this.types = types;
     }
 
     /**

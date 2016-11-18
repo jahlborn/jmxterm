@@ -15,7 +15,7 @@ import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 
-import jline.ConsoleReader;
+import jline.console.ConsoleReader;
 
 import org.apache.commons.lang.Validate;
 import org.cyclopsgroup.jcli.annotation.Argument;
@@ -50,17 +50,18 @@ public class WatchCommand
             this.console = ( (JlineCommandInput) session.getInput() ).getConsole();
         }
 
-        protected void printLine( String line )
+        void printLine( String line )
             throws IOException
         {
             console.redrawLine();
-            console.printString( line );
+            console.print( line );
+            console.flush();
         }
     }
 
     private static abstract class Output
     {
-        protected abstract void printLine( String line )
+        abstract void printLine( String line )
             throws IOException;
     }
 
@@ -75,7 +76,7 @@ public class WatchCommand
         }
 
         @Override
-        protected void printLine( String line )
+        void printLine( String line )
         {
             out.println( line );
         }

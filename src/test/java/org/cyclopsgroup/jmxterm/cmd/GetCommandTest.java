@@ -5,14 +5,21 @@ import static org.junit.Assert.assertEquals;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.management.JMException;
 import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanInfo;
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
+import javax.management.openmbean.CompositeDataSupport;
+import javax.management.openmbean.CompositeType;
+import javax.management.openmbean.OpenDataException;
+import javax.management.openmbean.SimpleType;
 
 import org.apache.commons.lang.RandomStringUtils;
+import org.apache.commons.lang.SystemUtils;
 import org.cyclopsgroup.jmxterm.MockSession;
 import org.jmock.Expectations;
 import org.jmock.Mockery;
@@ -34,13 +41,18 @@ public class GetCommandTest
     private StringWriter output;
 
     private void getAttributeAndVerify( final String domain, String bean, final String attribute,
-                                        final String expectedBean, final Object expectedValue )
+                                        final String expectedBean, final Object expectedValue,
+                                        final boolean singleLine, final String delimiter)
     {
         command.setDomain( domain );
         command.setBean( bean );
         command.setAttributes( Arrays.asList( attribute ) );
         command.setSimpleFormat( true );
+        command.setSingleLine( singleLine );
+        command.setDelimiter( delimiter );
 
+        final String[] attributePath = attribute.split("\\.");
+        
         final MBeanServerConnection con = context.mock( MBeanServerConnection.class );
         final MBeanInfo beanInfo = context.mock( MBeanInfo.class );
         final MBeanAttributeInfo attributeInfo = context.mock( MBeanAttributeInfo.class );
@@ -56,17 +68,24 @@ public class GetCommandTest
                     one( beanInfo ).getAttributes();
                     will( returnValue( new MBeanAttributeInfo[] { attributeInfo } ) );
                     allowing( attributeInfo ).getName();
-                    will( returnValue( attribute ) );
+                    will( returnValue( attributePath[0] ) );
                     allowing( attributeInfo ).isReadable();
                     will( returnValue( true ) );
-                    one( con ).getAttribute( new ObjectName( expectedBean ), attribute );
+                    one( con ).getAttribute( new ObjectName( expectedBean ), attributePath[0] );
                     will( returnValue( expectedValue ) );
                 }
             } );
             command.setSession( new MockSession( output, con ) );
             command.execute();
             context.assertIsSatisfied();
-            assertEquals( expectedValue.toString(), output.toString().trim() );
+            
+            Object nestedExpectedValue = expectedValue;
+            
+            if ( expectedValue instanceof CompositeDataSupport ) {
+            	nestedExpectedValue = ((CompositeDataSupport)expectedValue).get(attributePath[1]);
+            }
+            
+            assertEquals( nestedExpectedValue.toString() + delimiter + (singleLine ? "" : SystemUtils.LINE_SEPARATOR), output.toString() );
         }
         catch ( JMException e )
         {
@@ -96,7 +115,7 @@ public class GetCommandTest
     @Test
     public void testExecuteNormally()
     {
-        getAttributeAndVerify( "a", "type=x", "a", "a:type=x", "bingo" );
+        getAttributeAndVerify( "a", "type=x", "a", "a:type=x", "bingo", false, "" );
     }
 
     /**
@@ -105,16 +124,36 @@ public class GetCommandTest
     @Test
     public void testExecuteWithNonStringType()
     {
-        getAttributeAndVerify( "a", "type=x", "a", "a:type=x", new Integer( 10 ) );
+        getAttributeAndVerify( "a", "type=x", "a", "a:type=x", new Integer( 10 ), false, "" );
+    }
+
+    @Test
+    public void testExecuteWithSlashInDomainName()
+    {
+        getAttributeAndVerify( "a/b", "type=c", "a", "a/b:type=c", "bingo", false, "" );
     }
 
     /**
      * Verify attribute name with dash, underline and dot is acceptable
+     * @throws OpenDataException 
      */
     @Test
-    public void testExecuteWithStrangeAttributeName()
+    public void testExecuteWithStrangeAttributeName() throws OpenDataException
     {
-        getAttributeAndVerify( "a", "type=x", "a_b-c.d", "a:type=x", "bingo" );
+    	final Map<String, Object> entries = new HashMap<String, Object>();
+    	entries.put("d", "bingo");
+    	final CompositeType compositeType = context.mock(CompositeType.class);
+        context.checking( new Expectations()
+        {
+            {
+                one( compositeType ).keySet();
+                will( returnValue( entries.keySet() ) );
+                one ( compositeType ).getType( "d" );
+                will( returnValue( SimpleType.STRING ) );
+            }
+        } );
+        Object expectedValue = new CompositeDataSupport(compositeType, entries);
+        getAttributeAndVerify( "a", "type=x", "a_b-c.d", "a:type=x", expectedValue, false, "" );
     }
 
     /**
@@ -123,6 +162,24 @@ public class GetCommandTest
     @Test
     public void testExecuteWithUnusualDomainAndBeanName()
     {
-        getAttributeAndVerify( "a-a", "a.b-c_d=x-y.z", "a", "a-a:a.b-c_d=x-y.z", "bingo" );
+        getAttributeAndVerify( "a-a", "a.b-c_d=x-y.z", "a", "a-a:a.b-c_d=x-y.z", "bingo", false, "" );
+    }
+    
+    /**
+     * Verify that delimiters are working
+     */
+    @Test
+    public void testExecuteWithDelimiters()
+    {
+        getAttributeAndVerify( "a", "type=x", "a", "a:type=x", "bingo", false, "," );
+    }
+    
+    /**
+     * Verify that single line output is working
+     */
+    @Test
+    public void testExecuteForSingleLineOutput()
+    {
+        getAttributeAndVerify( "a", "type=x", "a", "a:type=x", "bingo", true, "" );
     }
 }
