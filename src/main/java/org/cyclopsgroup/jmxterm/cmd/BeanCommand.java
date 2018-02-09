@@ -3,7 +3,7 @@ package org.cyclopsgroup.jmxterm.cmd;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
+import java.util.Set;
 import javax.management.InstanceNotFoundException;
 import javax.management.JMException;
 import javax.management.MBeanServerConnection;
@@ -57,6 +57,10 @@ public class BeanCommand
             try
             {
                 ObjectName name = new ObjectName( bean );
+                if(name.isPattern()) {
+                    name = resolvePatternName(con, name);
+                    bean = name.toString();
+                }
                 con.getMBeanInfo( name );
                 return bean;
             }
@@ -202,5 +206,19 @@ public class BeanCommand
     public final void setDomain( String domain )
     {
         this.domain = domain;
+    }
+
+    private static ObjectName resolvePatternName(MBeanServerConnection con, ObjectName name)
+        throws IOException
+    {
+        Set<ObjectName> names = con.queryNames(name, null);
+        int numMatches = ((names != null) ? names.size() : 0);
+        if(numMatches == 1) {
+            return names.iterator().next();
+        }
+        if(numMatches > 1) {
+            throw new IllegalArgumentException("Multiple mbean matches found: " + names);
+        }
+        return name;
     }
 }
