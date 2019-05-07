@@ -11,7 +11,7 @@ import org.apache.commons.lang.SystemUtils;
 
 /**
  * Utility to get class loader that understands tools.jar and jconsole.jar
- * 
+ *
  * @author <a href="mailto:jiaqi.guo@gmail.com">Jiaqi Guo</a>
  */
 public class JConsoleClassLoaderFactory
@@ -25,7 +25,8 @@ public class JConsoleClassLoaderFactory
      */
     public static ClassLoader getClassLoader()
     {
-        File javaHome = new File( SystemUtils.JAVA_HOME ).getAbsoluteFile().getParentFile();
+        File jreHome = new File( SystemUtils.JAVA_HOME ).getAbsoluteFile();
+        File javaHome = jreHome.getParentFile();
         final File toolsJar, jconsoleJar;
         if (isBeforeJava7() && isMacOs())
         {
@@ -34,7 +35,13 @@ public class JConsoleClassLoaderFactory
         }
         else
         {
-            toolsJar = new File( javaHome, "lib/tools.jar" );
+            File tmpToolsJar = new File( javaHome, "lib/tools.jar" );
+            if(!tmpToolsJar.isFile()) {
+                // try jre home instead
+                javaHome = jreHome;
+                tmpToolsJar = new File( javaHome, "lib/tools.jar" );
+            }
+            toolsJar = tmpToolsJar;
             jconsoleJar = new File( javaHome, "lib/jconsole.jar" );
         }
         if ( !toolsJar.isFile() )
